@@ -6,7 +6,6 @@ plugins {
 android {
     namespace = "com.muscab2006.gridlockheat"
     compileSdk = libs.versions.compileSdk.get().toInt()
-    ndkVersion = "27.0.12077973" // present in local SDK; CI installs latest
 
     defaultConfig {
         applicationId = "com.gridlockheat.qeytil"

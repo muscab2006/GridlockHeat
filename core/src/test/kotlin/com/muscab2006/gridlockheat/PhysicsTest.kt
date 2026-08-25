@@ -3,8 +3,6 @@ package com.muscab2006.gridlockheat
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
-import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
 class PhysicsTest {
@@ -99,12 +97,17 @@ class PhysicsTest {
     }
 
     @Test
-    fun `different cells usually differ and seed matters`() {
-        var differing = 0
-        for (i in 0 until 50) {
-            if (Physics.cellHasMark(i, 0, 1) != Physics.cellHasMark(i + 1, 0, 1)) differing++
+    fun `cell marks deterministic and reasonably distributed`() {
+        // exact determinism, always
+        for (i in 0 until 100) {
+            assertEquals(Physics.cellHasMark(i, 7, 42), Physics.cellHasMark(i, 7, 42))
         }
-        assertTrue(differing > 10, "decorations must vary across cells ($differing/49)")
-        assertNotEquals(Physics.cellHasMark(3, 4, 1), Physics.cellHasMark(3, 4, 999))
+        // marking rate ~15%: robust band over 1000 cells
+        var marked = 0
+        for (i in 0 until 1000) if (Physics.cellHasMark(i, 0, 1)) marked++
+        assertTrue(marked in 80..220, "marking rate out of band: $marked/1000")
+        // different seed must change a healthy fraction of cells
+        val changed = (0 until 200).count { Physics.cellHasMark(it, 3, 1) != Physics.cellHasMark(it, 3, 999) }
+        assertTrue(changed > 40, "seed must change decorations ($changed/200)")
     }
 }

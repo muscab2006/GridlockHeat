@@ -416,7 +416,7 @@ class GridlockHeat : ApplicationAdapter(), InputProcessor {
     // ─── input ─────────────────────────────────────────────────────────────
     override fun touchDown(screenX: Int, screenY: Int, pointer: Int, button: Int): Boolean {
         if (state != State.PLAYING) { startRun(); return true }
-        anchorX = screenX
+        anchorX = screenX.toFloat()
         return true
     }
 
@@ -434,6 +434,19 @@ class GridlockHeat : ApplicationAdapter(), InputProcessor {
         if (keycode == Input.Keys.SPACE || keycode == Input.Keys.ENTER) {
             if (state != State.PLAYING) startRun()
         }
+        return true
+    }
+
+    override fun keyUp(keycode: Int): Boolean = true
+
+    override fun keyTyped(character: Char): Boolean = true
+
+    override fun mouseMoved(screenX: Int, screenY: Int): Boolean = true
+
+    override fun scrolled(amountX: Float, amountY: Float): Boolean = true
+
+    override fun touchCancelled(screenX: Int, screenY: Int, pointer: Int, button: Int): Boolean {
+        steerInput = 0f
         return true
     }
 

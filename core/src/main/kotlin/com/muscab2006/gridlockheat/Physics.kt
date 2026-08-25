@@ -95,9 +95,12 @@ object Physics {
         var h = seed
         h = h * 31 + cellX
         h = h * 31 + cellY
+        // murmur3 finalizer — decorrelates neighboring cells thoroughly
+        h = h xor (h ushr 16)
+        h *= 0x85ebca6b.toInt()
         h = h xor (h ushr 13)
-        h *= 0x5bd1e995.toInt()
-        h = h xor (h ushr 15)
+        h *= 0xc2b2ae35.toInt()
+        h = h xor (h ushr 16)
         return (h and 0xFF) < 38 // ~15% of cells carry a painted mark
     }
 }
