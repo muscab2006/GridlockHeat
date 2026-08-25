@@ -9,11 +9,11 @@ android {
     ndkVersion = "27.0.12077973" // present in local SDK; CI installs latest
 
     defaultConfig {
-        applicationId = "com.muscab2006.gridlockheat"
+        applicationId = "com.gridlockheat.qeytil"
         minSdk = libs.versions.minSdk.get().toInt()
         targetSdk = libs.versions.targetSdk.get().toInt()
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.1.1-qeytil"
         // Fully offline game: INTERNET permission deliberately ABSENT.
         ndk {
             abiFilters += listOf("armeabi-v7a", "arm64-v8a")

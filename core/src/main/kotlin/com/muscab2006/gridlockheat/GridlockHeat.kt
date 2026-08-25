@@ -370,12 +370,14 @@ class GridlockHeat : ApplicationAdapter(), InputProcessor {
                 drawCenteredScreen("Drag left/right to steer — you never stop.", W / 2, H * 0.52f, 1.1f, Color.WHITE)
                 drawCenteredScreen("Near-miss cops for combos. Survive!", W / 2, H * 0.47f, 1.1f, Color.WHITE)
                 drawCenteredScreen("TAP TO DRIVE", W / 2, H * 0.34f, 1.8f, Color(1f, 0.85f, 0.2f, 1f))
+                drawCenteredScreen("BUILT BY QEYTIL", W / 2, H * 0.93f, 1.0f, Color(0.55f, 0.58f, 0.66f, 1f))
             }
             State.BUSTED -> {
                 drawCenteredScreen("BUSTED!", W / 2, H * 0.62f, 3.4f, Color(1f, 0.25f, 0.2f, 1f))
                 drawCenteredScreen("SCORE ${score.toInt()}", W / 2, H * 0.5f, 1.8f, Color.WHITE)
                 drawCenteredScreen("BEST ${highscore.toInt()}", W / 2, H * 0.44f, 1.2f, Color(0.8f, 0.83f, 0.9f, 1f))
                 drawCenteredScreen("TAP TO RETRY", W / 2, H * 0.33f, 1.6f, Color(1f, 0.85f, 0.2f, 1f))
+                drawCenteredScreen("BUILT BY QEYTIL", W / 2, H * 0.93f, 1.0f, Color(0.55f, 0.58f, 0.66f, 1f))
             }
         }
         batch.end()
