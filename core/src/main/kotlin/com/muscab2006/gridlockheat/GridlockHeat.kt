@@ -108,6 +108,8 @@ class GridlockHeat : ApplicationAdapter(), InputProcessor {
 
     override fun create() {
         shapes = ShapeRenderer()
+        shapes.enableBlending()
+        shapes.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA)
         batch = SpriteBatch()
         font = BitmapFont().apply { data.setScale(1.5f) }
         layout = GlyphLayout()
