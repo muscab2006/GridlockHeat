@@ -108,8 +108,6 @@ class GridlockHeat : ApplicationAdapter(), InputProcessor {
 
     override fun create() {
         shapes = ShapeRenderer()
-        shapes.enableBlending()
-        shapes.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA)
         batch = SpriteBatch()
         font = BitmapFont().apply { data.setScale(1.5f) }
         layout = GlyphLayout()
@@ -405,7 +403,7 @@ class GridlockHeat : ApplicationAdapter(), InputProcessor {
 
         // ── pass A: ground, skids, headlight cones, directional shadows ──
         shapes.projectionMatrix = camera.combined
-        shapes.begin(ShapeRenderer.ShapeType.Filled)
+        beginShapes()
 
         drawGround()
         drawSkids()
@@ -437,7 +435,7 @@ class GridlockHeat : ApplicationAdapter(), InputProcessor {
         batch.end()
 
         // ── pass C: lightbar glows, particles, flash ──
-        shapes.begin(ShapeRenderer.ShapeType.Filled)
+        beginShapes()
         for (c in cops) {
             val cx = lerp(c.prevX, c.kin.x, alpha); val cy = lerp(c.prevY, c.kin.y, alpha)
             val blue = sin(c.phase) > 0f
@@ -473,6 +471,13 @@ class GridlockHeat : ApplicationAdapter(), InputProcessor {
     }
 
     private fun carHeadingPrev() = car.heading // v1: heading interp skipped (small angles/frame)
+
+    /** ShapeRenderer lost its own blend API in modern gdx - drive GL state directly. */
+    private fun beginShapes() {
+        Gdx.gl.glEnable(GL20.GL_BLEND)
+        Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA)
+        shapes.begin(ShapeRenderer.ShapeType.Filled)
+    }
 
     private fun drawGround() {
         val cell = 220f
