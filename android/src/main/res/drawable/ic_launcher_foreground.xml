@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- asphalt -->
+    <path android:fillColor="#1E2026"
+        android:pathData="M0,0h108v108h-108z" />
+    <!-- road stripes -->
+    <path android:fillColor="#3A3D46"
+        android:pathData="M50,0h8v22h-8z M50,43h8v22h-8z M50,86h8v22h-8z" />
+    <!-- player car (drifting orange) -->
+    <group android:pivotX="54" android:pivotY="54" android:rotation="-28">
+        <path android:fillColor="#FF9E0D"
+            android:pathData="M36,38 h36 a6,6 0 0 1 6,6 v20 a6,6 0 0 1 -6,6 h-36 a6,6 0 0 1 -6,-6 v-20 a6,6 0 0 1 6,-6 z" />
+        <path android:fillColor="#141820"
+            android:pathData="M46,44 h16 a4,4 0 0 1 4,4 v12 a4,4 0 0 1 -4,4 h-16 a4,4 0 0 1 -4,-4 v-12 a4,4 0 0 1 4,-4 z" />
+    </group>
+    <!-- cop light glow hint -->
+    <path android:fillColor="#3397F00D"
+        android:pathData="M20,20m-14,0a14,14 0 1,0 28,0a14,14 0 1,0 -28,0" />
+</vector>
