@@ -4,7 +4,6 @@ build/
 
 # Android
 android/build/
-android/src/main/jniLibs/
 local.properties
 *.apk.idsig
 

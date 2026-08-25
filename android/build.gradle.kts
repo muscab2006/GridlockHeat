@@ -19,12 +19,6 @@ android {
         }
     }
 
-    sourceSets {
-        getByName("main") {
-            jniLibs.srcDir(layout.buildDirectory.dir("extracted-jniLibs"))
-        }
-    }
-
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -53,23 +47,8 @@ android {
     }
 }
 
-configurations {
-    maybeCreate("natives").apply { isCanBeResolved = true }
-}
-
 dependencies {
     implementation(project(":core"))
     implementation(libs.gdx.backend.android)
     implementation(libs.gdx)
-
-    add("natives", "com.badlogicgames.gdx:gdx-platform:${libs.versions.gdx.get()}:natives-armeabi-v7a")
-    add("natives", "com.badlogicgames.gdx:gdx-platform:${libs.versions.gdx.get()}:natives-arm64-v8a")
 }
-
-val copyAndroidNatives = tasks.register<Copy>("copyAndroidNatives") {
-    from(configurations["natives"].map { f -> if (f.extension == "jar") zipTree(f) else f })
-    into(layout.buildDirectory.dir("extracted-jniLibs"))
-    include("armeabi-v7a/*", "arm64-v8a/*")
-}
-
-tasks.named("preBuild") { dependsOn(copyAndroidNatives) }
