@@ -136,7 +136,7 @@ class GridlockHeat : ApplicationAdapter(), InputProcessor {
                 spawnTimer -= dt
                 if (spawnTimer <= 0f) {
                     spawnCop()
-                    spawnTimer = 3.2f - min(time / 90f, 1f) * 1.9f
+                    spawnTimer = 3.6f - min(time / 100f, 1f) * 1.6f
                 }
             }
             else -> {}
@@ -163,23 +163,28 @@ class GridlockHeat : ApplicationAdapter(), InputProcessor {
     }
 
     private fun updateCops(dt: Float) {
-        // lead the player so head-ons and intercept arcs emerge naturally
-        val leadX = car.x + cos(car.velAngle) * 260f
-        val leadY = car.y + sin(car.velAngle) * 260f
-        val copMaxSpeed = 382f + min(time * 0.5f, 30f)
+        // FAIRNESS MODEL: cops are always slower than the player's drift-boosted
+        // top speed; they steer with a limited turn rate (zigzag works!); and
+        // they rubber-band (ease off) when nearly touching — no cheap kills.
+        val copBaseSpeed = 300f + min(time * 1.1f, 80f)   // 300 -> 380 cap, never > drift speed
+        val copTurnRate = 2.1f                             // rad/s — arcs, overshoots, dodgeable
         for (c in cops) {
             c.prevX = c.kin.x; c.prevY = c.kin.y
-            val dx = leadX - c.kin.x
-            val dy = leadY - c.kin.y
+            val dx = car.x - c.kin.x
+            val dy = car.y - c.kin.y
             val len = sqrt(dx * dx + dy * dy).coerceAtLeast(0.001f)
-            val ux = dx / len; val uy = dy / len
-            val sp = min(copMaxSpeed * (0.75f + 0.25f * min(len / 500f, 1f)), copMaxSpeed)
-            c.kin.x += ux * sp * dt
-            c.kin.y += uy * sp * dt
-            c.kin.heading = Physics.lerpAngle(c.kin.heading, kotlin.math.atan2(uy, ux), 10f * dt)
+
+            // limited-turn-rate pursuit (car-like, dodgeable)
+            val targetAngle = kotlin.math.atan2(dy, dx)
+            c.kin.heading = Physics.lerpAngle(c.kin.heading, targetAngle, (copTurnRate * dt).coerceIn(0f, 1f))
+
+            // rubber-band: slightly slower when close, full speed when far
+            val spd = copBaseSpeed * (0.78f + 0.22f * min(len / 650f, 1f))
+            c.kin.x += cos(c.kin.heading) * spd * dt
+            c.kin.y += sin(c.kin.heading) * spd * dt
             c.phase += dt * 6f
 
-            val dist = dist(c.kin.x, c.kin.y, car.x, car.y)
+            val dist = len
             val relSpeed = abs(
                 distTo(c.prevX, c.prevY, carPrevX, carPrevY) - dist
             ) / dt
@@ -191,7 +196,7 @@ class GridlockHeat : ApplicationAdapter(), InputProcessor {
                 Proximity.HIT -> { bust(); return }
                 Proximity.NEAR -> if (c.nearArmed) {
                     c.nearArmed = false
-                    nearMiss(ux, uy)
+                    nearMiss(ux = -dx / len, uy = -dy / len)
                 }
                 Proximity.NONE -> if (dist > NEAR_RANGE * 1.5f) c.nearArmed = true
             }
@@ -207,7 +212,7 @@ class GridlockHeat : ApplicationAdapter(), InputProcessor {
     }
 
     private fun spawnCop() {
-        val cap = (3 + time / 14f).toInt().coerceAtMost(18)
+        val cap = (3 + time / 18f).toInt().coerceAtMost(12)
         if (cops.size >= cap) return
         val ang = MathUtilsRandom.nextFloat() * 6.28318f
         val r = 900f + MathUtilsRandom.nextFloat() * 250f
@@ -257,7 +262,7 @@ class GridlockHeat : ApplicationAdapter(), InputProcessor {
         carPrevX = 0f; carPrevY = 0f
         cops.clear(); skids.clear(); popups.clear()
         time = 0f; score = 0f; combo = 1; comboTimer = 0f
-        trauma = 0f; spawnTimer = 2f; steerInput = 0f; flashTimer = 0f
+        trauma = 0f; spawnTimer = 4f; steerInput = 0f; flashTimer = 0f
         state = State.PLAYING
     }
 
