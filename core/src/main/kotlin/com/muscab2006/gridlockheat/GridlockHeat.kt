@@ -32,7 +32,7 @@ private const val BUST_RANGE = CAR_R + COP_R
 private const val NEAR_RANGE = 96f
 private const val MIN_REL_SPEED = 230f
 private const val COMBO_TIME = 4f
-private const val VIEW_H = 760f
+private const val VIEW_W = 520f   // portrait: fixed world width, height follows aspect
 
 class GridlockHeat : ApplicationAdapter(), InputProcessor {
 
@@ -53,6 +53,8 @@ class GridlockHeat : ApplicationAdapter(), InputProcessor {
     private lateinit var font: BitmapFont
     private lateinit var layout: GlyphLayout
     private lateinit var prefs: Preferences
+    private lateinit var texPlayer: com.badlogic.gdx.graphics.Texture
+    private lateinit var texCop: com.badlogic.gdx.graphics.Texture
     private val camera = OrthographicCamera()
 
     private val car = CarKinematics()
@@ -82,14 +84,19 @@ class GridlockHeat : ApplicationAdapter(), InputProcessor {
         layout = GlyphLayout()
         prefs = Gdx.app.getPreferences("gridlockheat")
         highscore = prefs.getFloat("highscore", 0f)
+        texPlayer = com.badlogic.gdx.graphics.Texture(Gdx.files.internal("gfx/player.png")).apply {
+            setFilter(com.badlogic.gdx.graphics.Texture.TextureFilter.Linear, com.badlogic.gdx.graphics.Texture.TextureFilter.Linear)
+        }
+        texCop = com.badlogic.gdx.graphics.Texture(Gdx.files.internal("gfx/cop.png")).apply {
+            setFilter(com.badlogic.gdx.graphics.Texture.TextureFilter.Linear, com.badlogic.gdx.graphics.Texture.TextureFilter.Linear)
+        }
         resize(Gdx.graphics.width, Gdx.graphics.height)
         Gdx.input.inputProcessor = this
     }
 
     override fun resize(width: Int, height: Int) {
-        val h = if (width >= height) VIEW_H * height.toFloat() / width else VIEW_H
-        val w = if (width >= height) VIEW_H else VIEW_H * width.toFloat() / height
-        camera.setToOrtho(false, w, h)
+        // portrait: constant world width, tall viewport = more look-ahead
+        camera.setToOrtho(false, VIEW_W, VIEW_W * height.toFloat() / width.toFloat())
         camera.position.set(car.x, car.y, 0f)
         camera.update()
     }
@@ -274,7 +281,9 @@ class GridlockHeat : ApplicationAdapter(), InputProcessor {
         val sh = trauma * trauma
         val sx = (MathUtilsRandom.nextFloat() * 2 - 1) * 26f * sh
         val sy = (MathUtilsRandom.nextFloat() * 2 - 1) * 26f * sh
-        camera.position.set(icx + sx, icy + sy, 0f)
+        // portrait framing: push car toward lower third for look-ahead
+        val camLeadY = camera.viewportHeight * 0.16f
+        camera.position.set(icx + sx, icy + sy + camLeadY, 0f)
         camera.update()
 
         Gdx.gl.glClearColor(0.06f, 0.06f, 0.08f, 1f)
@@ -288,13 +297,26 @@ class GridlockHeat : ApplicationAdapter(), InputProcessor {
         // blob shadows
         shadow(icx, icy)
         for (c in cops) shadow(lerp(c.prevX, c.kin.x, alpha), lerp(c.prevY, c.kin.y, alpha))
-        // cars
-        drawCarBody(icx, icy, lerpAngleShort(carHeadingPrev(), car.heading, alpha), PLAYER_COLOR, isPlayer = true)
+        shapes.end()
+
+        // ── real sprite cars ──
+        batch.projectionMatrix = camera.combined
+        batch.begin()
+        drawCarSprite(texPlayer, icx, icy, lerpAngleShort(carHeadingPrev(), car.heading, alpha),
+            48f, Color(1f, 0.74f, 0.42f, 1f)) // QEYTIL orange-red hero tint
         for (c in cops) {
-            drawCarBody(
-                lerp(c.prevX, c.kin.x, alpha), lerp(c.prevY, c.kin.y, alpha),
-                c.kin.heading, COP_COLOR, isPlayer = false, phase = c.phase
-            )
+            drawCarSprite(texCop, lerp(c.prevX, c.kin.x, alpha), lerp(c.prevY, c.kin.y, alpha),
+                c.kin.heading, 48f, Color(0.62f, 0.66f, 0.8f, 1f))
+        }
+        batch.end()
+
+        // lightbars + bust flash back on shapes
+        shapes.begin(ShapeRenderer.ShapeType.Filled)
+        for (c in cops) {
+            val cx = lerp(c.prevX, c.kin.x, alpha); val cy = lerp(c.prevY, c.kin.y, alpha)
+            val blue = sin(c.phase) > 0f
+            shapes.color = if (blue) Color(0.25f, 0.55f, 1f, 0.95f) else Color(1f, 0.2f, 0.12f, 0.95f)
+            rectRot(cx, cy, 9f, 20f, c.kin.heading)
         }
         if (flashTimer > 0f) {
             shapes.color = Color(1f, 0.15f, 0.1f, flashTimer * 1.6f)
@@ -344,20 +366,22 @@ class GridlockHeat : ApplicationAdapter(), InputProcessor {
         ellipse(x - 6f, y - CAR_R * 0.55f, CAR_R * 2.3f, CAR_R * 1.1f)
     }
 
-    private fun drawCarBody(x: Float, y: Float, angle: Float, color: Color, isPlayer: Boolean, phase: Float = 0f) {
-        shapes.color = color
-        rectRot(x, y, 46f, 24f, angle)
-        shapes.color = Color(0.08f, 0.10f, 0.14f, 1f)
-        rectRot(x + cos(angle) * 4f, y + sin(angle) * 4f, 16f, 18f, angle) // cabin
-        if (!isPlayer) {
-            // flashing lightbar
-            val blue = sin(phase) > 0f
-            shapes.color = if (blue) Color(0.2f, 0.5f, 1f, 1f) else Color(1f, 0.15f, 0.1f, 1f)
-            rectRot(x, y, 10f, 22f, angle)
-        } else {
-            shapes.color = Color(1f, 0.9f, 0.3f, 0.9f)
-            rectRot(x + cos(angle) * 21f, y + sin(angle) * 21f, 6f, 18f, angle) // headlights
-        }
+    /** Kenney cars face screen-up; -90° maps art-north to our heading-0 east. */
+    private fun drawCarSprite(t: com.badlogic.gdx.graphics.Texture, x: Float, y: Float, angleRad: Float, lengthUnits: Float, tint: Color) {
+        val scale = lengthUnits / t.height
+        val w = t.width * scale
+        val h = lengthUnits
+        batch.color = tint
+        batch.draw(
+            t, x - w / 2f, y - h / 2f,
+            w / 2f, h / 2f,
+            w, h,
+            1f, 1f,
+            angleRad * 57.2957795f - 90f,
+            0, 0, t.width, t.height,
+            false, false
+        )
+        batch.color = Color.WHITE
     }
 
     private fun drawHud() {
@@ -457,6 +481,7 @@ class GridlockHeat : ApplicationAdapter(), InputProcessor {
 
     override fun dispose() {
         if (score > highscore) { highscore = score; prefs.putFloat("highscore", highscore); prefs.flush() }
+        texPlayer.dispose(); texCop.dispose()
         shapes.dispose(); batch.dispose(); font.dispose()
     }
 

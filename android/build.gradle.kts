@@ -11,8 +11,8 @@ android {
         applicationId = "com.gridlockheat.qeytil"
         minSdk = libs.versions.minSdk.get().toInt()
         targetSdk = libs.versions.targetSdk.get().toInt()
-        versionCode = 3
-        versionName = "0.2.0-balance"
+        versionCode = 5
+        versionName = "0.3.1-portrait-art"
         // Fully offline game: INTERNET permission deliberately ABSENT.
         ndk {
             abiFilters += listOf("armeabi-v7a", "arm64-v8a")
