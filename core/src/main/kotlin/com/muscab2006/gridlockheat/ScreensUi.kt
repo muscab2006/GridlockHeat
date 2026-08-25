@@ -90,7 +90,8 @@ object ScreensUi {
         whitePx: Texture,
         W: Float, H: Float, bgKeyArt: Texture?, highscore: Float,
         cards: Array<MapCard>, selectedCard: Int,
-        titlePulseT: Float, tapZonesOut: FloatArray
+        titlePulseT: Float, tapZonesOut: FloatArray,
+        bankTotal: Int = 0, garageZoneOut: FloatArray? = null
     ) {
         try {
             val mX = W * 0.06f
@@ -233,6 +234,26 @@ object ScreensUi {
                 tapZonesOut[3] = btnH
             }
 
+            // ── GARAGE pill + coin bank, above the credit ──
+            run {
+                val gw = W * 0.42f
+                val gh = H * 0.052f
+                val gx2 = W / 2f - gw / 2f
+                val gy2 = H * 0.105f
+                if (garageZoneOut != null && garageZoneOut.size >= 4) {
+                    garageZoneOut[0] = gx2; garageZoneOut[1] = gy2
+                    garageZoneOut[2] = gw; garageZoneOut[3] = gh
+                }
+                tmp.set(skin.accent2); tmp.a = 0.8f
+                frame(batch, whitePx, gx2, gy2, gw, gh, HAIRLINE * 1.6f, tmp)
+                tmp.set(skin.accent2)
+                centered(batch, font, layout, "GARAGE", W / 2f - gw * 0.06f, gy2 + gh / 2f, 1.15f, tmp)
+                // bank display right side of pill row
+                val bs = "◉ $bankTotal"
+                tmp.set(Color(1f, 0.84f, 0.3f, 1f))
+                centered(batch, font, layout, bs, W / 2f + gw * 0.34f, gy2 + gh / 2f, 1.15f, tmp)
+            }
+
             // footer credit
             tmp.set(skin.dim)
             centered(batch, font, layout, QEYTIL_CREDIT, W / 2f, H * 0.045f, 0.95f, tmp)
@@ -257,7 +278,9 @@ object ScreensUi {
         whitePx: Texture,
         W: Float, H: Float, score: Float, combo: Int, missionText: String?,
         missionRatio: Float, copsAlive: Int, speedKmh: Int,
-        timerText: String? = null, pauseZoneOut: FloatArray? = null
+        timerText: String? = null, pauseZoneOut: FloatArray? = null,
+        strikes: Int = 0, strikesMax: Int = 3, bankTotal: Int = 0,
+        nitroFrac: Float = -1f, nitroZoneOut: FloatArray? = null
     ) {
         try {
             val pad = W * 0.035f
@@ -360,6 +383,56 @@ object ScreensUi {
                 fill(batch, whitePx, bx + bs * 0.57f, by + bs * 0.29f, barW, barH, tmp)
             }
 
+            // ── wreck strikes: red ✕ chips under the score block ──
+            run {
+                val chip = W * 0.042f
+                val gap = chip * 0.35f
+                val cx0 = pad + 4f
+                val cy = H - topMargin - H * 0.155f
+                for (i in 0 until strikesMax) {
+                    val x0 = cx0 + i * (chip + gap)
+                    tmp.set(if (i < strikes) Color(1f, 0.25f, 0.2f, 1f) else Color(1f, 1f, 1f, 0.14f))
+                    fill(batch, whitePx, x0, cy, chip, chip * 0.62f, tmp)
+                    if (i < strikes) {
+                        tmp.set(Color.BLACK); tmp.a = 0.85f
+                        centered(batch, font, layout, "✕", x0 + chip / 2f, cy + chip * 0.31f, 0.9f, tmp)
+                    }
+                }
+            }
+
+            // ── coin bank chip: left of pause button ──
+            run {
+                val s = "◉ $bankTotal"
+                val bw = measure(font, layout, s, 1.05f)
+                val bh = measureH(font, layout, s, 1.05f)
+                val pw = bw + 30f
+                val ph = bh + 16f
+                val px = W - pad - pw - H * 0.062f - 10f
+                val py = H - topMargin - ph - H * 0.062f
+                panel(batch, whitePx, px, py, pw, ph, skin)
+                tmp.set(Color(1f, 0.84f, 0.3f, 1f))
+                centered(batch, font, layout, s, px + pw / 2f, py + ph / 2f, 1.05f, tmp)
+            }
+
+            // ── nitro button (bottom-right) when owned ──
+            if (nitroFrac >= 0f) {
+                val bs = H * 0.075f
+                val bx = W - pad - bs
+                val by = pad + H * 0.02f
+                if (nitroZoneOut != null && nitroZoneOut.size >= 4) {
+                    nitroZoneOut[0] = bx; nitroZoneOut[1] = by
+                    nitroZoneOut[2] = bs; nitroZoneOut[3] = bs
+                }
+                tmp.set(0f, 0f, 0f, 0.5f)
+                fill(batch, whitePx, bx, by, bs, bs, tmp)
+                // cooldown/charge fill from bottom
+                tmp.set(if (nitroFrac >= 1f) skin.accent2 else skin.dim)
+                fill(batch, whitePx, bx + 3f, by + 3f, (bs - 6f) * nitroFrac.coerceIn(0f, 1f), bs - 6f, tmp)
+                tmp.set(Color.WHITE)
+                centered(batch, font, layout,
+                    if (nitroFrac >= 1f) "NITRO" else "", bx + bs / 2f, by + bs / 2f, 0.8f, tmp)
+            }
+
             // ── hint (bottom) ──
             tmp.set(skin.dim)
             tmp.a = 0.85f
@@ -390,7 +463,8 @@ object ScreensUi {
         whitePx: Texture,
         W: Float, H: Float, score: Float, best: Float, isNewBest: Boolean,
         nearMisses: Int, topCombo: Int, survivedSec: Int,
-        missionVerdict: String, pulseT: Float
+        missionVerdict: String, pulseT: Float,
+        titleText: String = "BUSTED", runCoinsEarned: Int = 0
     ) {
         try {
             // dim the world behind
@@ -410,9 +484,9 @@ object ScreensUi {
 
             // BUSTED — double-draw shadow then red-shifted accent
             tmp.set(SHADOW)
-            centered(batch, font, layout, "BUSTED", W / 2f + 4f, H * 0.79f - 6f, 3.9f, tmp)
+            centered(batch, font, layout, titleText, W / 2f + 4f, H * 0.79f - 6f, 3.9f, tmp)
             tmp.set(tmp2)
-            centered(batch, font, layout, "BUSTED", W / 2f, H * 0.79f, 3.9f, tmp)
+            centered(batch, font, layout, titleText, W / 2f, H * 0.79f, 3.9f, tmp)
 
             // score block
             tmp.set(skin.dim)
@@ -590,6 +664,76 @@ object ScreensUi {
                 tmp.set(skin.dim)
                 centered(batch, font, layout, "MAIN MENU", bx + bw / 2f, by + bH / 2f, 1.15f, tmp)
             }
+        } finally {
+            font.data.setScale(1f)
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // GARAGE: spend coins. zonesOut: [0..3]=BACK, then rows ENGINE,
+    // NITRO, CAR — 4-row grid of 16 floats.
+    // ─────────────────────────────────────────────────────────────────────
+    fun drawGarage(
+        batch: SpriteBatch, font: BitmapFont, layout: GlyphLayout, skin: UiSkin,
+        whitePx: Texture, W: Float, H: Float, pulseT: Float, zonesOut: FloatArray,
+        bankTotal: Int, engineLv: Int, nitroOwned: Boolean, carTier: Int
+    ) {
+        try {
+            for (i in 0 until 5) {
+                val t = i / 4f
+                tmp.set(BG_BOT).lerp(BG_TOP, t); tmp.a = 1f
+                fill(batch, whitePx, 0f, H * i / 5f, W, H / 5f + 1f, tmp)
+            }
+            tmp.set(skin.accent)
+            centered(batch, font, layout, "GARAGE", W / 2f, H * 0.935f, 2.6f, tmp)
+            tmp.set(Color(1f, 0.84f, 0.3f, 1f))
+            centered(batch, font, layout, "◉ $bankTotal", W / 2f, H * 0.885f, 1.3f, tmp)
+            val engCost = 150 * (engineLv + 1)
+            val carCost = intArrayOf(1200, 2500, 5000).getOrElse(carTier) { -1 }
+            val carName = arrayOf("SPEEDSTER", "BEAST", "PHANTOM").getOrElse(carTier) { "MAXED" }
+            val rows = arrayOf(
+                Triple("ENGINE TUNE Lv$engineLv/5", "+4% top speed each", if (engineLv >= 5) -1 else engCost),
+                Triple(if (nitroOwned) "NITRO READY" else "NITRO KIT", "tap in-run: 2s boost, 8s cooldown", if (nitroOwned) -1 else 400),
+                Triple(if (carTier < 3) carName else "PHANTOM OWNED", if (carTier < 3) "next ride: +10% speed" else "the city bows", carCost)
+            )
+            val rowH = H * 0.115f
+            var ry = H * 0.72f
+            val rw = W * 0.84f
+            val rx = W / 2f - rw / 2f
+            // BACK button top-right
+            run {
+                val bw2 = W * 0.22f; val bh2 = H * 0.05f
+                val bx2 = W - bw2 - W * 0.04f; val by2 = H - bh2 - H * 0.02f
+                zonesOut[0] = bx2; zonesOut[1] = by2; zonesOut[2] = bw2; zonesOut[3] = bh2
+                panel(batch, whitePx, bx2, by2, bw2, bh2, skin)
+                tmp.set(skin.dim)
+                centered(batch, font, layout, "BACK", bx2 + bw2 / 2f, by2 + bh2 / 2f, 1.1f, tmp)
+            }
+            for (r in rows.indices) {
+                val (titleTxt, sub, cost) = rows[r]
+                val o = 4 + r * 4
+                zonesOut[o] = rx; zonesOut[o + 1] = ry; zonesOut[o + 2] = rw; zonesOut[o + 3] = rowH
+                panel(batch, whitePx, rx, ry, rw, rowH, skin)
+                tmp.set(skin.accent)
+                fill(batch, whitePx, rx, ry, 4f, rowH, tmp)
+                tmp.set(Color.WHITE)
+                centered(batch, font, layout, titleTxt, rx + rw * 0.34f, ry + rowH * 0.62f, 1.15f, tmp)
+                tmp.set(skin.dim)
+                centered(batch, font, layout, sub, rx + rw * 0.34f, ry + rowH * 0.30f, 0.85f, tmp)
+                val owned = cost <= 0
+                val canBuy = !owned && bankTotal >= cost
+                tmp.set(when { owned -> skin.accent2; canBuy -> skin.accent; else -> Color(1f,1f,1f,0.25f) })
+                val bW = rw * 0.26f; val bH = rowH * 0.55f
+                val bX = rx + rw - bW - W * 0.03f; val bY = ry + rowH / 2f - bH / 2f
+                if (owned || canBuy) fill(batch, whitePx, bX, bY, bW, bH, tmp)
+                else frame(batch, whitePx, bX, bY, bW, bH, HAIRLINE * 1.5f, tmp)
+                tmp.set(if (tmp == skin.accent || tmp == skin.accent2) Color.BLACK else Color.WHITE)
+                centered(batch, font, layout, when { owned -> "OWNED"; canBuy -> "◉ $cost"; else -> "◉ $cost" },
+                    bX + bW / 2f, bY + bH / 2f, 1.0f, tmp)
+                ry -= rowH + H * 0.028f
+            }
+            tmp.set(skin.dim)
+            centered(batch, font, layout, QEYTIL_CREDIT, W / 2f, H * 0.045f, 0.95f, tmp)
         } finally {
             font.data.setScale(1f)
         }
