@@ -95,6 +95,8 @@ class GridlockHeat : ApplicationAdapter(), InputProcessor {
     private var driftBank = 0f
     private val pauseZone = FloatArray(4)
     private val pauseBtnZones = FloatArray(12)
+    private val traffic = Traffic(14)
+    private val playerPos = FloatArray(2)
     private var loggedOnce = false
     private lateinit var whitePx: com.badlogic.gdx.graphics.Texture
 
@@ -199,7 +201,9 @@ class GridlockHeat : ApplicationAdapter(), InputProcessor {
                 Physics.driftStep(car, speed, steer, dt, TURN_RATE, GRIP * theme.gripMul)
 
                 // drift lean: the camera banks into the slide
-                cine.extraRollDeg = if (sliding) -steer * 2.4f else (cine.extraRollDeg * (1f - 6f * dt))
+                // damped lean: no more snap-glitch when steer flips mid-drift
+                val leanTarget = if (sliding) -steer * 2.1f else 0f
+                cine.extraRollDeg += (leanTarget - cine.extraRollDeg) * min(9f * dt, 1f)
 
                 // missions + particles + prop collisions
                 mission?.let { m -> if (m.kind == Mission.SURVIVE) m.add(dt) }
@@ -217,6 +221,32 @@ class GridlockHeat : ApplicationAdapter(), InputProcessor {
                     }
                 }
                 collideProps()
+
+                // live city: buildings are solid, traffic flows and can be hit
+                if (theme.hasRoads) {
+                    traffic.update(dt, car.x, car.y, SEED.toLong())
+                    playerPos[0] = car.x; playerPos[1] = car.y
+                    if (City.collideBuildings(playerPos, 17f, SEED)) {
+                        car.x = playerPos[0]; car.y = playerPos[1]
+                        slowTimer = maxOf(slowTimer, 0.3f)
+                        trauma = (trauma + 0.22f).coerceAtLeast(0f)
+                        combo = 1; comboTimer = 0f
+                        particles.sparkBurst(car.x + car.heading * 0f, car.y)
+                        popups.add(Popup(car.x, car.y + 60f, "CRUNCH!", Color(1f, 0.6f, 0.2f, 1f)))
+                    }
+                    val hi = traffic.hitTest(car.x, car.y, 33f)
+                    if (hi >= 0) {
+                        traffic.nudgeAway(hi, car.x, car.y)
+                        particles.sparkBurst((car.x + traffic.x(hi)) / 2f, (car.y + traffic.y(hi)) / 2f)
+                        slowTimer = maxOf(slowTimer, 0.35f)
+                        trauma = (trauma + 0.3f).coerceAtLeast(0f)
+                        hitStop = maxOf(hitStop, 0.035f)
+                        score = maxOf(score - 25f, 0f)
+                        combo = 1; comboTimer = 0f
+                        statNear = statNear // unchanged
+                        popups.add(Popup(car.x, car.y + 64f, "CRASH!", Color(1f, 0.3f, 0.25f, 1f)))
+                    }
+                }
 
                 if (!theme.isRacing) {
                     updateCops(dt)
@@ -431,6 +461,7 @@ class GridlockHeat : ApplicationAdapter(), InputProcessor {
         PropField.layout(theme, System.nanoTime(), props)
         mission = if (theme.isRacing) Mission.generate(System.nanoTime(), Mission.GATES) else Mission.generate(System.nanoTime())
         particles.update(10f) // expire leftovers
+        traffic.reset(System.nanoTime(), car.x, car.y)
         if (theme.isRacing) { raceTime = 20f; gatesPassed = 0; seedGates() } else { gates.clear() }
         state = State.PLAYING
     }
@@ -495,6 +526,13 @@ class GridlockHeat : ApplicationAdapter(), InputProcessor {
         beginShapes()
 
         drawGround()
+        if (theme.hasRoads) {
+            val halfW = VIEW_W * camera.zoom / 2f + 120f
+            val halfH = camera.viewportHeight * camera.zoom / 2f + 120f
+            City.drawWorld(shapes, camera.position.x - halfW, camera.position.y - halfH,
+                camera.position.x + halfW, camera.position.y + halfH,
+                SEED, theme.sunX, theme.sunY, theme.hasBuildings)
+        }
         drawSkids()
         if (state != State.MENU) {
             GlowFx.headlightCones(shapes, Color(1f, 0.93f, 0.65f, 0.8f), icx, icy,
@@ -521,6 +559,7 @@ class GridlockHeat : ApplicationAdapter(), InputProcessor {
             56f, Color(0.10f, 0.08f, 0.10f, 1f))
         drawCarSprite(texPlayer, icx, icy, heroAng,
             56f, Color(1f, 0.74f, 0.42f, 1f)) // QEYTIL orange-red hero tint
+        if (theme.hasRoads) traffic.draw(batch, texCop, 52f, 57.2957795f)
         for (c in cops) {
             val cxp = lerp(c.prevX, c.kin.x, alpha); val cyp = lerp(c.prevY, c.kin.y, alpha)
             drawCarSprite(texCop, cxp - theme.sunX * 4f, cyp - theme.sunY * 4f, c.kin.heading,

@@ -37,7 +37,9 @@ class MapTheme(
     // scoring flavor text
     val scoreWord: String,     // "SCORE" / "STYLE" / "HEAT"
     // racing-mode flag: gates vs the clock instead of cops
-    val isRacing: Boolean = false
+    val isRacing: Boolean = false,
+    // v0.6 live city: avenue grid + solid buildings + ambient traffic
+    val hasRoads: Boolean = false
 )
 
 object Themes {
@@ -51,7 +53,8 @@ object Themes {
         gripMul = 1f, copSpeedMul = 1f, copSpawnMul = 1f,
         propSet = PropSet.CITY, propDensity = 7, hasBuildings = true,
         weather = Weather.NONE, sunX = -0.55f, sunY = -0.83f,
-        scoreWord = "SCORE"
+        scoreWord = "SCORE",
+        hasRoads = true
     )
 
     val SNOW_DRIFT = MapTheme(
@@ -91,7 +94,8 @@ object Themes {
         propSet = PropSet.CITY, propDensity = 5, hasBuildings = false,
         weather = Weather.NONE, sunX = 0.7f, sunY = -0.72f,
         scoreWord = "TIME ATTACK",
-        isRacing = true
+        isRacing = true,
+        hasRoads = true
     )
 
     val ALL: Array<MapTheme> = arrayOf(CRIME_CITY, SNOW_DRIFT, CANYON_RUSH, RACING_DUSK)
