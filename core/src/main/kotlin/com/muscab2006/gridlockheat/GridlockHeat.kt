@@ -36,7 +36,7 @@ private const val VIEW_W = 520f   // portrait: fixed world width, height follows
 
 class GridlockHeat : ApplicationAdapter(), InputProcessor {
 
-    private enum class State { MENU, PLAYING, BUSTED }
+    private enum class State { MENU, PLAYING, BUSTED, PAUSED }
 
     private class Cop {
         val kin = CarKinematics()
@@ -88,6 +88,13 @@ class GridlockHeat : ApplicationAdapter(), InputProcessor {
     private var statNear = 0
     private var statTopCombo = 1
     private var frameNo = 0
+    // v0.5 arcade: racing gates, pause zones, drift bank, combo tiers
+    private val gates = ArrayList<FloatArray>() // x,y,angle,passed(0/1)
+    private var raceTime = 0f
+    private var gatesPassed = 0
+    private var driftBank = 0f
+    private val pauseZone = FloatArray(4)
+    private val pauseBtnZones = FloatArray(12)
     private var loggedOnce = false
     private lateinit var whitePx: com.badlogic.gdx.graphics.Texture
 
@@ -191,31 +198,48 @@ class GridlockHeat : ApplicationAdapter(), InputProcessor {
                 speed *= 1f - 0.45f * min(slowTimer / 0.35f, 1f)
                 Physics.driftStep(car, speed, steer, dt, TURN_RATE, GRIP * theme.gripMul)
 
+                // drift lean: the camera banks into the slide
+                cine.extraRollDeg = if (sliding) -steer * 2.4f else (cine.extraRollDeg * (1f - 6f * dt))
+
                 // missions + particles + prop collisions
                 mission?.let { m -> if (m.kind == Mission.SURVIVE) m.add(dt) }
                 mission?.let { m -> if (m.kind == Mission.DRIFT && sliding) m.add(dt * 9f) }
                 frameNo++
                 if (sliding && frameNo % 3 == 0) {
                     particles.driftPuff(car.x, car.y, car.heading, Physics.driftAmount(car))
+                    // addictive loop: sliding literally prints money
+                    driftBank += dt * 40f * combo
+                    if (driftBank >= 100f) {
+                        score += driftBank
+                        popups.add(Popup(car.x + 40f, car.y + 46f,
+                            "+${driftBank.toInt()}", Color(1f, 0.9f, 0.4f, 1f)))
+                        driftBank = 0f
+                    }
                 }
                 collideProps()
 
-                updateCops(dt)
-                updateCombo(dt)
-                score += dt * 10f * combo
+                if (!theme.isRacing) {
+                    updateCops(dt)
+                    updateCombo(dt)
+                    score += dt * 10f * combo
 
-                spawnTimer -= dt
-                if (spawnTimer <= 0f) {
-                    spawnCop()
-                    spawnTimer = (3.6f - min(time / 100f, 1f) * 1.6f) / theme.copSpawnMul
+                    spawnTimer -= dt
+                    if (spawnTimer <= 0f) {
+                        spawnCop()
+                        spawnTimer = (3.6f - min(time / 100f, 1f) * 1.6f) / theme.copSpawnMul
+                    }
+                } else {
+                    updateRace(dt)
                 }
             }
             else -> {}
         }
 
-        for (i in skids.indices.reversed()) {
-            val s = skids[i]; s[3] -= dt
-            if (s[3] <= 0f) skids.removeAt(i)
+        if (state != State.PAUSED) {
+            for (i in skids.indices.reversed()) {
+                val s = skids[i]; s[3] -= dt
+                if (s[3] <= 0f) skids.removeAt(i)
+            }
         }
         popups.removeAll { p ->
             p.color.a -= dt * 0.9f
@@ -302,10 +326,71 @@ class GridlockHeat : ApplicationAdapter(), InputProcessor {
         comboTimer = COMBO_TIME
         score += 50f * combo
         trauma = (trauma + 0.16f).coerceAtLeast(0f)
+        hitStop = maxOf(hitStop, 0.035f)              // micro slow-mo juice
+        cine.kick(0.45f + 0.05f * combo)              // zoom punch per near-miss
         val px = car.x + ux * NEAR_RANGE
         val py = car.y + uy * NEAR_RANGE
         popups.add(Popup(px, py, "+${50 * combo}", Color(1f, 0.85f, 0.2f, 1f)))
-        if (combo >= 4) popups.add(Popup(car.x, car.y + 70f, "×$combo", Color(1f, 0.4f, 0.95f, 1f)))
+        when (combo) {
+            4 -> popups.add(Popup(car.x, car.y + 80f, "HOT!", Color(1f, 0.5f, 0.15f, 1f)))
+            8 -> popups.add(Popup(car.x, car.y + 84f, "BLAZING!", Color(1f, 0.25f, 0.5f, 1f)))
+            12 -> popups.add(Popup(car.x, car.y + 88f, "INFERNO!", Color(0.7f, 0.2f, 1f, 1f)))
+            else -> if (combo >= 4) popups.add(Popup(car.x, car.y + 70f, "×$combo", Color(1f, 0.4f, 0.95f, 1f)))
+        }
+    }
+
+    // ─── racing mode: gates vs the clock ─────────────────────────────────────
+    private fun seedGates() {
+        gates.clear()
+        var gx = car.x + cos(car.heading) * 520f
+        var gy = car.y + sin(car.heading) * 520f
+        var ang = car.heading
+        for (i in 0 until 6) {
+            gates.add(floatArrayOf(gx, gy, ang, 0f))
+            ang += (MathUtilsRandom.nextFloat() - 0.5f) * 1.1f
+            gx += cos(ang) * 430f; gy += sin(ang) * 430f
+        }
+    }
+
+    private fun updateRace(dt: Float) {
+        raceTime -= dt
+        score += dt * 14f
+        // pass detection on nearest gate
+        for (g in gates) {
+            if (g[3] != 0f) continue
+            val dx = car.x - g[0]; val dy = car.y - g[1]
+            val d2 = dx * dx + dy * dy
+            if (d2 < 85f * 85f) {
+                g[3] = 1f
+                gatesPassed++
+                mission?.add(1f)
+                raceTime += 3.5f
+                val bonus = 250 * combo
+                score += bonus
+                cine.kick(0.55f)
+                hitStop = maxOf(hitStop, 0.03f)
+                particles.sparkBurst(g[0], g[1])
+                popups.add(Popup(g[0], g[1] + 50f, "GATE +3.5s", Color(0.3f, 1f, 0.7f, 1f)))
+                popups.add(Popup(g[0], g[1] - 10f, "+$bonus", Color(1f, 0.9f, 0.4f, 1f)))
+            } else if (d2 > 320f * 320f && dx * cos(g[2]) + dy * sin(g[2]) < -60f) {
+                g[3] = 1f // flew past it — missed
+                popups.add(Popup(g[0], g[1], "MISSED", Color(1f, 0.35f, 0.3f, 0.9f)))
+            }
+        }
+        // keep a chain of upcoming gates
+        var last = gates.lastOrNull { it[3] == 0f } ?: gates.last()
+        while (gates.count { it[3] == 0f } < 5) {
+            val ang = last[2] + (MathUtilsRandom.nextFloat() - 0.5f) * 1.1f
+            val nx = last[0] + cos(ang) * 430f
+            val ny = last[1] + sin(ang) * 430f
+            gates.add(floatArrayOf(nx, ny, ang, 0f))
+            last = gates[gates.size - 1]
+        }
+        // prune passed/missed gates far behind
+        gates.removeAll { g ->
+            g[3] != 0f && dist(g[0], g[1], car.x, car.y) > 900f
+        }
+        if (raceTime <= 0f) bust(timeUp = true)
     }
 
     private fun dropSkids(dt: Float) {
@@ -320,12 +405,13 @@ class GridlockHeat : ApplicationAdapter(), InputProcessor {
         }
     }
 
-    private fun bust() {
+    private fun bust(timeUp: Boolean = false) {
         state = State.BUSTED
-        hitStop = 0.09f
+        hitStop = if (timeUp) 0.25f else 0.09f
         trauma = 1f
         flashTimer = 0.35f
         prevHigh = highscore
+        timeUpFlag = timeUp
         if (score > highscore) {
             highscore = score
             prefs.putFloat("highscore", highscore)
@@ -340,10 +426,12 @@ class GridlockHeat : ApplicationAdapter(), InputProcessor {
         time = 0f; score = 0f; combo = 1; comboTimer = 0f
         trauma = 0f; spawnTimer = 4f; steerInput = 0f; flashTimer = 0f
         slowTimer = 0f; statNear = 0; statTopCombo = 1
+        driftBank = 0f; timeUpFlag = false
         MathUtilsRandom.reseed((System.nanoTime() and 0x7FFFFFFFL).toInt())
         PropField.layout(theme, System.nanoTime(), props)
-        mission = Mission.generate(System.nanoTime())
+        mission = if (theme.isRacing) Mission.generate(System.nanoTime(), Mission.GATES) else Mission.generate(System.nanoTime())
         particles.update(10f) // expire leftovers
+        if (theme.isRacing) { raceTime = 20f; gatesPassed = 0; seedGates() } else { gates.clear() }
         state = State.PLAYING
     }
 
@@ -371,14 +459,15 @@ class GridlockHeat : ApplicationAdapter(), InputProcessor {
         // ── cinematic camera brain ──
         val wantMode = when (state) {
             State.MENU -> CinematicCam.Mode.MENU_ORBIT
-            State.PLAYING -> CinematicCam.Mode.PLAY
+            State.PLAYING, State.PAUSED -> CinematicCam.Mode.PLAY
             else -> CinematicCam.Mode.BUST
         }
         if (cine.mode != wantMode) cine.setMode(wantMode)
         if (state == State.MENU) menuTime += rawDt
         val comboHeat = if (combo > 1 && comboTimer > 0f)
             ((combo - 1) / 11f) * (comboTimer / COMBO_TIME).coerceIn(0f, 1f) else 0f
-        cine.update(rawDt, car.x, car.y, 0f, trauma, comboHeat, menuTime)
+        // paused: freeze the shot dead (dt=0 short-circuits the cam brain)
+        cine.update(if (state == State.PAUSED) 0f else rawDt, car.x, car.y, 0f, trauma, comboHeat, menuTime)
         cine.apply(camera, VIEW_W, camera.viewportHeight)
         if (!loggedOnce) {
             loggedOnce = true
@@ -426,11 +515,18 @@ class GridlockHeat : ApplicationAdapter(), InputProcessor {
         batch.projectionMatrix = camera.combined
         batch.begin()
         drawProps(alpha)
-        drawCarSprite(texPlayer, icx, icy, lerpAngleShort(carHeadingPrev(), car.heading, alpha),
-            48f, Color(1f, 0.74f, 0.42f, 1f)) // QEYTIL orange-red hero tint
+        val heroAng = lerpAngleShort(carHeadingPrev(), car.heading, alpha)
+        // pseudo-3D: dark extruded base slightly offset against the sun, then body
+        drawCarSprite(texPlayer, icx - theme.sunX * 4f, icy - theme.sunY * 4f, heroAng,
+            56f, Color(0.10f, 0.08f, 0.10f, 1f))
+        drawCarSprite(texPlayer, icx, icy, heroAng,
+            56f, Color(1f, 0.74f, 0.42f, 1f)) // QEYTIL orange-red hero tint
         for (c in cops) {
-            drawCarSprite(texCop, lerp(c.prevX, c.kin.x, alpha), lerp(c.prevY, c.kin.y, alpha),
-                c.kin.heading, 48f, Color(0.62f, 0.66f, 0.8f, 1f))
+            val cxp = lerp(c.prevX, c.kin.x, alpha); val cyp = lerp(c.prevY, c.kin.y, alpha)
+            drawCarSprite(texCop, cxp - theme.sunX * 4f, cyp - theme.sunY * 4f, c.kin.heading,
+                56f, Color(0.09f, 0.09f, 0.12f, 1f))
+            drawCarSprite(texCop, cxp, cyp, c.kin.heading,
+                56f, Color(0.62f, 0.66f, 0.8f, 1f))
         }
         batch.end()
 
@@ -444,6 +540,7 @@ class GridlockHeat : ApplicationAdapter(), InputProcessor {
             shapes.color = if (blue) Color(0.25f, 0.55f, 1f, 0.95f) else Color(1f, 0.2f, 0.12f, 0.95f)
             rectRot(cx, cy, 9f, 20f, c.kin.heading)
         }
+        if (theme.isRacing) drawGatesWorld()
         if (theme.hasBuildings) drawLampPools()
         val pColor = when (theme.weather) {
             Weather.SNOW -> Color(1f, 1f, 1f, 0.75f)
@@ -531,6 +628,30 @@ class GridlockHeat : ApplicationAdapter(), InputProcessor {
     }
 
     /** City flavor: warm sodium street-lamp pools on a sparse deterministic grid. */
+    /** Racing gates: twin neon pylons + crossbar, drawn in world space. */
+    private fun drawGatesWorld() {
+        val pink = theme.markColor
+        for (g in gates) {
+            if (g[3] != 0f) continue
+            val dx = g[0] - camera.position.x; val dy = g[1] - camera.position.y
+            if (dx * dx + dy * dy > 1500f * 1500f) continue
+            val pa = g[2] + 1.5707964f // perpendicular
+            val ox = cos(pa) * 58f; val oy = sin(pa) * 58f
+            val x1 = g[0] - ox; val y1 = g[1] - oy
+            val x2 = g[0] + ox; val y2 = g[1] + oy
+            GlowFx.glowDisc(shapes, pink, x1, y1, 34f, 0.85f)
+            GlowFx.glowDisc(shapes, pink, x2, y2, 34f, 0.85f)
+            shapes.setColor(pink.r, pink.g, pink.b, 0.95f)
+            shapes.circle(x1, y1, 9f); shapes.circle(x2, y2, 9f)
+            for (k in 0 until 3) {
+                val t0 = k / 3f; val t1 = (k + 1) / 3f
+                shapes.setColor(pink.r, pink.g, pink.b, 0.5f - k * 0.14f)
+                val mx = (x1 + x2) / 2f; val my = (y1 + y2) / 2f
+                rectRot(mx, my, dist(x1, y1, x2, y2), 7f - k * 2f, g[2])
+            }
+        }
+    }
+
     private fun drawLampPools() {
         val step = 340f
         val gx0 = ((camera.position.x - camera.viewportWidth) / step).toInt()
@@ -566,6 +687,7 @@ class GridlockHeat : ApplicationAdapter(), InputProcessor {
     }
 
     private var prevHigh = 0f
+    private var timeUpFlag = false
 
     private fun drawHud() {
         batch.projectionMatrix = com.badlogic.gdx.math.Matrix4().setToOrtho2D(0f, 0f, Gdx.graphics.width.toFloat(), Gdx.graphics.height.toFloat())
@@ -577,11 +699,15 @@ class GridlockHeat : ApplicationAdapter(), InputProcessor {
                 val kmh = ((BASE_SPEED + min(time / 120f, 1f) * MAX_SPEED_RAMP
                     + (if (Physics.driftAmount(car) > DRIFTING_RAD) DRIFT_BONUS_SPEED else 0f)) * 0.62f).toInt()
                 val m = mission
+                val timerTxt = if (theme.isRacing) String.format("%.1fs", raceTime) else null
                 ScreensUi.drawHud(batch, font, layout, uiSkin, whitePx, W, H,
                     score = score, combo = combo,
                     missionText = m?.hudText(), missionRatio = m?.ratio() ?: 0f,
-                    copsAlive = cops.size, speedKmh = kmh)
+                    copsAlive = cops.size, speedKmh = kmh,
+                    timerText = timerTxt, pauseZoneOut = pauseZone)
             }
+            State.PAUSED -> ScreensUi.drawPause(
+                batch, font, layout, uiSkin, whitePx, W, H, menuTime, pauseBtnZones)
             State.MENU -> ScreensUi.drawMenu(
                 batch, font, layout, uiSkin, whitePx, W, H, menuBg, highscore,
                 mapCards, themeIx, menuTime, tapZones)
@@ -589,7 +715,8 @@ class GridlockHeat : ApplicationAdapter(), InputProcessor {
                 batch, font, layout, uiSkin, whitePx, W, H,
                 score = score, best = highscore, isNewBest = score >= prevHigh && score > 0f,
                 nearMisses = statNear, topCombo = statTopCombo, survivedSec = time.toInt(),
-                missionVerdict = Mission.verdict(mission), pulseT = menuTime)
+                missionVerdict = if (timeUpFlag) "TIME UP — ${gatesPassed} GATES CLEARED"
+                                 else Mission.verdict(mission), pulseT = menuTime)
         }
         batch.end()
     }
@@ -645,9 +772,37 @@ class GridlockHeat : ApplicationAdapter(), InputProcessor {
             }
             startRun(); return true
         }
-        if (state != State.PLAYING) { startRun(); return true }
-        anchorX = screenX.toFloat()
-        return true
+        val Hs = Gdx.graphics.height.toFloat()
+        val fy2 = Hs - screenY
+        val fx2 = screenX.toFloat()
+        if (state == State.PLAYING) {
+            if (pauseZone[2] > 0f && fx2 >= pauseZone[0] && fx2 <= pauseZone[0] + pauseZone[2] &&
+                fy2 >= pauseZone[1] && fy2 <= pauseZone[1] + pauseZone[3]) {
+                state = State.PAUSED
+                steerInput = 0f
+                return true
+            }
+            anchorX = screenX.toFloat()
+            return true
+        }
+        if (state == State.PAUSED) {
+            var zi = 0
+            while (zi < 12) {
+                val zx = pauseBtnZones[zi]; val zy = pauseBtnZones[zi + 1]
+                val zw = pauseBtnZones[zi + 2]; val zh = pauseBtnZones[zi + 3]
+                if (zw > 0f && fx2 >= zx && fx2 <= zx + zw && fy2 >= zy && fy2 <= zy + zh) {
+                    when (zi) {
+                        0 -> state = State.PLAYING
+                        4 -> startRun()
+                        else -> { state = State.MENU; cine.setMode(CinematicCam.Mode.MENU_ORBIT) }
+                    }
+                    return true
+                }
+                zi += 4
+            }
+            return true
+        }
+        startRun(); return true
     }
 
     override fun touchDragged(screenX: Int, screenY: Int, pointer: Int): Boolean {

@@ -99,7 +99,8 @@ object ScreensUi {
             if (bgKeyArt != null) {
                 val tw = bgKeyArt.width.toFloat()
                 val th = bgKeyArt.height.toFloat()
-                val s = max(W / tw, H / th)               // cover-fit
+                val ken = 1f + 0.045f * sin(titlePulseT * 0.35f)   // Ken-Burns drift
+                val s = max(W / tw, H / th) * ken
                 val dw = tw * s
                 val dh = th * s
                 batch.color = Color.WHITE
@@ -136,10 +137,12 @@ object ScreensUi {
                 centered(batch, font, layout, s, W / 2f, H * 0.955f, 0.95f, tmp)
             }
 
-            // ── title: double-draw (dark shadow +4,-6, accent on top) ──
+            // ── title: triple-draw (shadow, cyan rim, orange face) ──
             val ts = 4.2f * (1f + 0.02f * sin(titlePulseT * 2f))
             tmp.set(SHADOW)
             centered(batch, font, layout, "GRIDLOCK HEAT", W / 2f + 4f, H * 0.845f - 6f, ts, tmp)
+            tmp.set(skin.accent2)
+            centered(batch, font, layout, "GRIDLOCK HEAT", W / 2f + 2.5f, H * 0.845f + 2.5f, ts, tmp)
             tmp.set(skin.accent)
             centered(batch, font, layout, "GRIDLOCK HEAT", W / 2f, H * 0.845f, ts, tmp)
 
@@ -253,7 +256,8 @@ object ScreensUi {
         batch: SpriteBatch, font: BitmapFont, layout: GlyphLayout, skin: UiSkin,
         whitePx: Texture,
         W: Float, H: Float, score: Float, combo: Int, missionText: String?,
-        missionRatio: Float, copsAlive: Int, speedKmh: Int
+        missionRatio: Float, copsAlive: Int, speedKmh: Int,
+        timerText: String? = null, pauseZoneOut: FloatArray? = null
     ) {
         try {
             val pad = W * 0.035f
@@ -313,23 +317,47 @@ object ScreensUi {
                 fill(batch, whitePx, bx, py + 9f, bw * r, 5f, tmp)
             }
 
-            // ── wanted cluster (top-right) ──
+            // ── wanted cluster / race timer (top-right) + pause button ──
             run {
-                val copsS = "COPS $copsAlive"
-                val spdS = "$speedKmh KM/H"
-                val w1 = measure(font, layout, copsS, 1.3f)
-                val h1 = measureH(font, layout, copsS, 1.3f)
-                val w2 = measure(font, layout, spdS, 0.85f)
-                val h2 = measureH(font, layout, spdS, 0.85f)
+                val topS: String
+                val botS: String
+                val urgent = timerText != null && timerText.length > 2 &&
+                    (timerText[0] != ' ' && (timerText.substringBefore('.').trim().toIntOrNull() ?: 99) <= 5)
+                if (timerText != null) {
+                    topS = timerText
+                    botS = "$speedKmh KM/H"
+                } else {
+                    topS = "COPS $copsAlive"
+                    botS = "$speedKmh KM/H"
+                }
+                val w1 = measure(font, layout, topS, 1.5f)
+                val h1 = measureH(font, layout, topS, 1.5f)
+                val w2 = measure(font, layout, botS, 0.85f)
+                val h2 = measureH(font, layout, botS, 0.85f)
                 val pw = max(w1, w2) + 36f
                 val ph = h1 + h2 + 27f
-                val px = W - pad - pw
+                val px = W - pad - pw - H * 0.062f   // leave room for pause button
                 val py = H - topMargin - ph
                 panel(batch, whitePx, px, py, pw, ph, skin)
-                tmp.set(skin.accent2)
-                centered(batch, font, layout, copsS, px + pw / 2f, py + ph - h1 / 2f - 12f, 1.3f, tmp)
+                tmp.set(if (urgent) Color(1f, 0.25f, 0.2f, 1f) else skin.accent2)
+                centered(batch, font, layout, topS, px + pw / 2f, py + ph - h1 / 2f - 12f, 1.5f, tmp)
                 tmp.set(skin.dim)
-                centered(batch, font, layout, spdS, px + pw / 2f, py + 9f + h2 / 2f, 0.85f, tmp)
+                centered(batch, font, layout, botS, px + pw / 2f, py + 9f + h2 / 2f, 0.85f, tmp)
+
+                // ── pause button: rounded square with two bars ──
+                val bs = H * 0.052f
+                val bx = W - pad - bs
+                val by = H - topMargin - bs
+                if (pauseZoneOut != null && pauseZoneOut.size >= 4) {
+                    pauseZoneOut[0] = bx; pauseZoneOut[1] = by
+                    pauseZoneOut[2] = bs; pauseZoneOut[3] = bs
+                }
+                panel(batch, whitePx, bx, by, bs, bs, skin)
+                tmp.set(skin.accent)
+                val barW = bs * 0.11f
+                val barH = bs * 0.42f
+                fill(batch, whitePx, bx + bs * 0.32f, by + bs * 0.29f, barW, barH, tmp)
+                fill(batch, whitePx, bx + bs * 0.57f, by + bs * 0.29f, barW, barH, tmp)
             }
 
             // ── hint (bottom) ──
@@ -510,5 +538,60 @@ object ScreensUi {
         sb.append("      TOP COMBO ×").append(topCombo)
         sb.append("      SURVIVED ").append(survivedSec).append('s')
         return sb.toString()
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // PAUSE overlay: dim + centered glass panel with 3 stacked actions.
+    // zonesOut layout (DRAW-SPACE y-up, caller flips): [0..3]=RESUME,
+    // [4..7]=RESTART, [8..11]=MENU.
+    // ─────────────────────────────────────────────────────────────────────
+    fun drawPause(
+        batch: SpriteBatch, font: BitmapFont, layout: GlyphLayout, skin: UiSkin,
+        whitePx: Texture, W: Float, H: Float, pulseT: Float, zonesOut: FloatArray
+    ) {
+        try {
+            tmp.set(0f, 0f, 0f, 0.68f)
+            fill(batch, whitePx, 0f, 0f, W, H, tmp)
+            val pw = W * 0.74f
+            val bH = H * 0.062f
+            val gap = H * 0.018f
+            val ph = H * 0.075f + bH * 3f + gap * 2f + H * 0.02f
+            val px = W / 2f - pw / 2f
+            val py = H * 0.56f - ph / 2f
+            panel(batch, whitePx, px, py, pw, ph, skin)
+            tmp.set(skin.accent)
+            centered(batch, font, layout, "PAUSED", W / 2f, py + ph - H * 0.037f, 2.4f, tmp)
+            var by = py + H * 0.014f
+            val bx = px + W * 0.05f
+            val bw = pw - W * 0.1f
+            // RESUME - filled orange
+            run {
+                zonesOut[0] = bx; zonesOut[1] = by; zonesOut[2] = bw; zonesOut[3] = bH
+                tmp.set(skin.accent); tmp.a = 0.9f + 0.1f * sin(pulseT * 3f)
+                fill(batch, whitePx, bx, by, bw, bH, tmp)
+                tmp.set(Color.BLACK)
+                centered(batch, font, layout, "RESUME", bx + bw / 2f, by + bH / 2f, 1.3f, tmp)
+                by += bH + gap
+            }
+            // RESTART - cyan outline
+            run {
+                zonesOut[4] = bx; zonesOut[5] = by; zonesOut[6] = bw; zonesOut[7] = bH
+                tmp.set(skin.accent2); tmp.a = 0.85f
+                frame(batch, whitePx, bx, by, bw, bH, HAIRLINE * 1.6f, tmp)
+                tmp.set(skin.accent2)
+                centered(batch, font, layout, "RESTART RUN", bx + bw / 2f, by + bH / 2f, 1.25f, tmp)
+                by += bH + gap
+            }
+            // MENU - ghost
+            run {
+                zonesOut[8] = bx; zonesOut[9] = by; zonesOut[10] = bw; zonesOut[11] = bH
+                tmp.set(Color.WHITE); tmp.a = 0.16f
+                fill(batch, whitePx, bx, by, bw, bH, tmp)
+                tmp.set(skin.dim)
+                centered(batch, font, layout, "MAIN MENU", bx + bw / 2f, by + bH / 2f, 1.15f, tmp)
+            }
+        } finally {
+            font.data.setScale(1f)
+        }
     }
 }

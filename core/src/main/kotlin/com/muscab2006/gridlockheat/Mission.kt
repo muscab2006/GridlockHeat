@@ -13,14 +13,17 @@ class Mission private constructor(val kind: Int, val target: Float, val label: S
         const val SURVIVE = 0   // seconds alive
         const val NEAR_MISS = 1 // count of near misses
         const val DRIFT = 2     // cumulative drift meters
+        const val GATES = 3     // racing gates cleared
 
         private val KINDS = intArrayOf(SURVIVE, NEAR_MISS, DRIFT)
 
-        fun generate(seed: Long): Mission {
+        fun generate(seed: Long, forceKind: Int = -1): Mission {
             val r = kotlin.random.Random(seed)
-            return when (KINDS[(r.nextFloat() * 3).toInt().coerceIn(0, 2)]) {
+            val kind = if (forceKind >= 0) forceKind else KINDS[(r.nextFloat() * 3).toInt().coerceIn(0, 2)]
+            return when (kind) {
                 SURVIVE -> Mission(SURVIVE, 45f + (r.nextFloat() * 30f).toInt(), "SURVIVE")
                 NEAR_MISS -> Mission(NEAR_MISS, (5 + r.nextFloat() * 7).toInt().toFloat(), "NEAR MISSES")
+                GATES -> Mission(GATES, (4 + r.nextFloat() * 4).toInt().toFloat(), "GATES")
                 else -> Mission(DRIFT, 400f + (r.nextFloat() * 500f).toInt(), "DRIFT METERS")
             }
         }

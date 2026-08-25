@@ -82,6 +82,13 @@ class CinematicCam {
     private var hadPos = false          // seen a car sample since the last (re)entry
     private var reentering = true       // next update() cuts to the opening framing
 
+    // ── v0.5 juice hooks (called by the game on events) ──
+    /** Extra roll in degrees layered on top of mode logic (drift lean). */
+    var extraRollDeg = 0f
+
+    /** External punch injection: near-miss / gate-pass zoom kicks. */
+    fun kick(punchAdd: Float) { punchAmt = (punchAmt + punchAdd).coerceAtMost(1.5f) }
+
     // Read-only introspection for tests/debug overlays.
     internal val zoom get() = zoomCur
     internal val punch get() = punchAmt
@@ -141,7 +148,7 @@ class CinematicCam {
         camera.position.set(camX + shakeX, camY + shakeY, 0f)
         camera.zoom = zoomCur
         // Roll encoded in the up-vector => absolute each frame, never accumulates.
-        val rad = rollCurDeg * MathUtils.degreesToRadians
+        val rad = (rollCurDeg + extraRollDeg) * MathUtils.degreesToRadians
         camera.direction.set(0f, 0f, -1f)
         camera.up.set(sin(rad), cos(rad), 0f)
         // false = skip the frustum rebuild: projection/view/combined above are

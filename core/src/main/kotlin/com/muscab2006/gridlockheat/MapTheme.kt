@@ -35,7 +35,9 @@ class MapTheme(
     val sunX: Float,           // direction shadows are cast toward (unit-ish)
     val sunY: Float,
     // scoring flavor text
-    val scoreWord: String      // "SCORE" / "STYLE" / "AIRTIME"
+    val scoreWord: String,     // "SCORE" / "STYLE" / "HEAT"
+    // racing-mode flag: gates vs the clock instead of cops
+    val isRacing: Boolean = false
 )
 
 object Themes {
@@ -78,6 +80,20 @@ object Themes {
         scoreWord = "HEAT"
     )
 
-    val ALL = arrayOf(CRIME_CITY, SNOW_DRIFT, CANYON_RUSH)
+    val RACING_DUSK = MapTheme(
+        id = "racing", displayName = "RACING DUSK", tagline = "beat the clock, thread the gates",
+        groundA = Color(0.13f, 0.12f, 0.17f, 1f), groundB = Color(0.15f, 0.14f, 0.19f, 1f),
+        markColor = Color(1f, 0.3f, 0.5f, 0.14f),
+        skidColor = Color(0.05f, 0.05f, 0.08f, 0.5f),
+        ambient = Color(0.9f, 0.35f, 0.6f, 0.05f),
+        vignette = 0.45f,
+        gripMul = 0.94f, copSpeedMul = 1f, copSpawnMul = 0f,
+        propSet = PropSet.CITY, propDensity = 5, hasBuildings = false,
+        weather = Weather.NONE, sunX = 0.7f, sunY = -0.72f,
+        scoreWord = "TIME ATTACK",
+        isRacing = true
+    )
+
+    val ALL: Array<MapTheme> = arrayOf(CRIME_CITY, SNOW_DRIFT, CANYON_RUSH, RACING_DUSK)
 }
 

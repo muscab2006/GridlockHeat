@@ -33,23 +33,26 @@ class Particles(capacity: Int) {
         }
     }
 
-    /** Drift dust puffs behind sliding tires. */
+    /** Drift smoke: cluster of soft round puffs that expand as they fade. */
     fun driftPuff(x: Float, y: Float, angle: Float, strength: Float) {
         val back = angle + 3.14159f
-        emit(
-            x + cos(back) * 20f, y + sin(back) * 20f,
-            cos(back) * 40f + (MathUtilsRandom.nextFloat() - 0.5f) * 60f,
-            sin(back) * 40f + (MathUtilsRandom.nextFloat() - 0.5f) * 60f,
-            0.55f + MathUtilsRandom.nextFloat() * 0.35f,
-            10f + strength * 16f
-        )
+        repeat(3) {
+            val jitterA = back + (MathUtilsRandom.nextFloat() - 0.5f) * 0.9f
+            emit(
+                x + cos(back) * 20f, y + sin(back) * 20f,
+                cos(jitterA) * (50f + MathUtilsRandom.nextFloat() * 70f),
+                sin(jitterA) * (50f + MathUtilsRandom.nextFloat() * 70f),
+                0.55f + MathUtilsRandom.nextFloat() * 0.4f,
+                9f + strength * 14f
+            )
+        }
     }
 
     fun sparkBurst(x: Float, y: Float) {
-        for (n in 0 until 7) {
+        for (n in 0 until 8) {
             val a = MathUtilsRandom.nextFloat() * 6.2832f
-            val sp = 120f + MathUtilsRandom.nextFloat() * 220f
-            emit(x, y, cos(a) * sp, sin(a) * sp, 0.22f + MathUtilsRandom.nextFloat() * 0.18f, 3.5f)
+            val sp = 140f + MathUtilsRandom.nextFloat() * 240f
+            emit(x, y, cos(a) * sp, sin(a) * sp, 0.22f + MathUtilsRandom.nextFloat() * 0.2f, 4.5f)
         }
     }
 
@@ -75,15 +78,17 @@ class Particles(capacity: Int) {
     }
 
     fun draw(shapes: ShapeRenderer, color: Color) {
-        shapes.setColor(color)
         var i = 0
         while (i < data.size) {
             val life = data[i + 4]
             if (life > 0f) {
                 val t = life / data[i + 5]
                 val s = data[i + 6]
+                // soft round puffs: big faint halo + bright core (no square edges)
+                shapes.setColor(color.r, color.g, color.b, color.a * t * 0.45f)
+                shapes.circle(data[i], data[i + 1], s * 0.9f)
                 shapes.setColor(color.r, color.g, color.b, color.a * t)
-                shapes.rect(data[i] - s / 2f, data[i + 1] - s / 2f, s, s)
+                shapes.circle(data[i], data[i + 1], s * 0.45f)
             }
             i += STRIDE
         }
