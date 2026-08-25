@@ -67,6 +67,7 @@ class GridlockHeat : ApplicationAdapter(), InputProcessor {
     private var acc = 0f
     private var hitStop = 0f
     private var trauma = 0f
+    private var crashCooldown = 0f   // gates crash penalties to once per 0.45s
     private var time = 0f
     private var score = 0f
     private var combo = 1
@@ -222,29 +223,33 @@ class GridlockHeat : ApplicationAdapter(), InputProcessor {
                 }
                 collideProps()
 
-                // live city: buildings are solid, traffic flows and can be hit
-                if (theme.hasRoads) {
+                // live city: buildings are solid, traffic flows and can be hit.
+                // crashCooldown keeps grinding walls from stacking trauma per frame
+                crashCooldown = (crashCooldown - dt).coerceAtLeast(0f)
+                if (theme.hasRoads && crashCooldown <= 0f) {
                     traffic.update(dt, car.x, car.y, SEED.toLong())
                     playerPos[0] = car.x; playerPos[1] = car.y
                     if (City.collideBuildings(playerPos, 17f, SEED)) {
                         car.x = playerPos[0]; car.y = playerPos[1]
                         slowTimer = maxOf(slowTimer, 0.3f)
-                        trauma = (trauma + 0.22f).coerceAtLeast(0f)
+                        trauma = (trauma + 0.22f).coerceIn(0f, 1.15f)
                         combo = 1; comboTimer = 0f
-                        particles.sparkBurst(car.x + car.heading * 0f, car.y)
+                        particles.sparkBurst(car.x, car.y)
                         popups.add(Popup(car.x, car.y + 60f, "CRUNCH!", Color(1f, 0.6f, 0.2f, 1f)))
-                    }
-                    val hi = traffic.hitTest(car.x, car.y, 33f)
-                    if (hi >= 0) {
-                        traffic.nudgeAway(hi, car.x, car.y)
-                        particles.sparkBurst((car.x + traffic.x(hi)) / 2f, (car.y + traffic.y(hi)) / 2f)
-                        slowTimer = maxOf(slowTimer, 0.35f)
-                        trauma = (trauma + 0.3f).coerceAtLeast(0f)
-                        hitStop = maxOf(hitStop, 0.035f)
-                        score = maxOf(score - 25f, 0f)
-                        combo = 1; comboTimer = 0f
-                        statNear = statNear // unchanged
-                        popups.add(Popup(car.x, car.y + 64f, "CRASH!", Color(1f, 0.3f, 0.25f, 1f)))
+                        crashCooldown = 0.45f
+                    } else {
+                        val hi = traffic.hitTest(car.x, car.y, 33f)
+                        if (hi >= 0) {
+                            traffic.nudgeAway(hi, car.x, car.y)
+                            particles.sparkBurst((car.x + traffic.x(hi)) / 2f, (car.y + traffic.y(hi)) / 2f)
+                            slowTimer = maxOf(slowTimer, 0.35f)
+                            trauma = (trauma + 0.3f).coerceIn(0f, 1.15f)
+                            hitStop = maxOf(hitStop, 0.035f)
+                            score = maxOf(score - 25f, 0f)
+                            combo = 1; comboTimer = 0f
+                            popups.add(Popup(car.x, car.y + 64f, "CRASH!", Color(1f, 0.3f, 0.25f, 1f)))
+                            crashCooldown = 0.45f
+                        }
                     }
                 }
 
@@ -355,7 +360,7 @@ class GridlockHeat : ApplicationAdapter(), InputProcessor {
         statTopCombo = maxOf(statTopCombo, combo)
         comboTimer = COMBO_TIME
         score += 50f * combo
-        trauma = (trauma + 0.16f).coerceAtLeast(0f)
+        trauma = (trauma + 0.16f).coerceIn(0f, 1.15f)
         hitStop = maxOf(hitStop, 0.035f)              // micro slow-mo juice
         cine.kick(0.45f + 0.05f * combo)              // zoom punch per near-miss
         val px = car.x + ux * NEAR_RANGE
@@ -475,7 +480,7 @@ class GridlockHeat : ApplicationAdapter(), InputProcessor {
             val dx = car.x - p.x; val dy = car.y - p.y
             if (dx * dx + dy * dy < (CAR_R * 0.72f + r) * (CAR_R * 0.72f + r)) {
                 slowTimer = 0.35f
-                trauma = (trauma + 0.14f).coerceAtLeast(0f)
+                trauma = (trauma + 0.14f).coerceIn(0f, 1.15f)
                 particles.sparkBurst(car.x, car.y)
                 break
             }
